@@ -1,0 +1,309 @@
+import fonts.fontAwesome;
+import fsys.config;
+import win.ui;
+/*DSG{{*/
+var winform = win.form(text="视频壁纸";right=583;bottom=239;border="thin";max=false)
+winform.add(
+add_={cls="button";text='\uF067';left=16;top=40;right=40;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=14};
+boot={cls="checkbox";text="Checkbox";left=288;top=11;right=302;bottom=25;dr=1;dt=1;z=6};
+edit={cls="edit";left=328;top=16;right=568;bottom=224;edge=1;multiline=1;vscroll=1;z=16};
+fit={cls="combobox";left=160;top=5;right=227;bottom=29;dr=1;dt=1;edge=1;items={};mode="dropdownlist";z=4};
+list={cls="listview";left=16;top=72;right=304;bottom=224;edge=1;font=LOGFONT(h=-14);fullRow=1;msel=false;z=15};
+mode={cls="combobox";left=48;top=5;right=120;bottom=29;dl=1;dt=1;edge=1;items={};mode="dropdownlist";z=2};
+next={cls="button";text='\uF051';left=136;top=40;right=160;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=11};
+play={cls="button";text='\uF04B';left=64;top=40;right=88;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=8};
+remove={cls="button";text='\uF068';left=40;top=40;right=64;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=7};
+static={cls="static";text="模式：";left=16;top=8;right=56;bottom=24;dl=1;dt=1;notify=1;transparent=1;z=1};
+static2={cls="static";text="契合：";left=128;top=8;right=168;bottom=27;dl=1;dt=1;transparent=1;z=3};
+static3={cls="static";text="开机启动";left=232;top=8;right=288;bottom=27;dr=1;dt=1;transparent=1;z=5};
+stop={cls="button";text='\uF04D';left=112;top=40;right=136;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=10};
+up={cls="button";text='\uF048';left=88;top=40;right=112;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=9};
+volume={cls="button";text='\uF028';left=184;top=40;right=208;bottom=64;font=LOGFONT(h=-18;name='FontAwesome');z=12};
+volume_trackbar={cls="plus";left=216;top=44;right=304;bottom=59;bgcolor=-1381657;border={radius=1};color=14252544;foreRight=10;notify=1;paddingBottom=4;paddingTop=4;z=13}
+)
+/*}}*/
+
+import libvlc;
+
+//引入另一个窗口
+var frmChild = winform.loadForm("\dlg\shadow.aardio");
+
+//模式声明
+winform.mode.items = {"不循环";"列表循环";"单个循环";"随机播放"};
+
+//契合声明
+winform.fit.items = {"默认";"填充";"适应";"拉伸";"16:9";"4:3"};
+
+//初始化vlc引擎
+var vlcEngine = libvlc();
+
+//创建播放器
+var vlcPlayer = vlcEngine.mediaPlayer(frmChild.video);
+
+//读取配置文件
+var cfg = fsys.config();
+//初始化路径表
+cfg.config.mix(
+   path = {};
+);
+//读取已有路径
+for(k, v in cfg.config.path){
+	var temp = string.split(v, "\");
+	min, max = table.range(temp);
+	winform.list.addItem(temp[max]);
+}
+//读取模式
+winform.mode.selText = cfg.config.mode;
+
+//将窗口设为壁纸(https://blog.csdn.net/sdlgq/article/details/128484784)
+setWallPaperWindow =  function(winhwnd,x,y,w,h){
+	if !win import win;
+	if x===null x,y,w,h=0,0,..win.getScreen();
+	var windowHandle = ..win.find("Progman")
+	if !windowHandle return ; 
+	::SendMessageTimeout(windowHandle, 1324, ..topointer(0), ..topointer(0), 0, 1000, 0);
+	var workerwin;
+	..win.enum(
+		function(hwnd){
+			var defview = ..win.findEx(hwnd, 0, "SHELLDLL_DefView", null);
+			if(defview)	workerwin = ..win.findEx(0, hwnd, "WorkerW", null);
+			return true; 
+		}
+	)
+	if workerwin ..win.show(workerwin,false);
+	..win.setParent(winhwnd,windowHandle);
+	..win.setPos(winhwnd,x,y,w,h,0,0);
+}
+
+//模式初始化
+if(winform.mode.text == "") winform.mode.selText = "不循环";
+
+//契合初始化
+if(winform.fit.text == "") winform.fit.selText = "默认";
+
+//开机启动
+winform.boot.oncommand = function(id,event){
+	
+}
+
+//视频名列表设计
+winform.list.modifyStyle(,0x4000/*_LVS_NOCOLUMNHEADER*/);
+winform.list.insertColumn("name", -1);
+
+//音量滑块控件设计
+winform.volume_trackbar.setTrackbarRange(0,100);
+import win.ui.tooltip;
+var tooltipCtrl = win.ui.tooltip.tracking(winform);
+var toolinfo = tooltipCtrl.addTrackingTool(winform.volume_trackbar);
+winform.volume_trackbar.onPosChanged = function( pos,thumbTrack ){
+	if(thumbTrack){
+		var x,_ = win.getMessagePos();
+		var _,y,cx,cy = winform.volume_trackbar.getPos(true);
+		toolinfo.setText(pos).trackPopup(true,x,y+cy);
+	}
+}
+
+//左键双击列表项触发事件 播放 \uF04B 暂停 \uF04C
+var video_focus = 0;
+winform.list.onDoubleClick = function(item,subItem,nmListView){
+	video_focus = winform.list.getFocused();
+	
+	//启动后立刻双击空白区则播放第一个
+	if(video_focus == 0){
+		video_focus = 1;
+	}
+	
+	setWallPaperWindow(frmChild.hwnd);
+	frmChild.show(true);
+	winform.play.text = '\uF04C';
+	vlcPlayer.loadMediaFile(cfg.config.path[video_focus]);
+	vlcPlayer.play();
+}
+
+//添加
+winform.add_.oncommand = function(id,event){
+	import fsys.dlg;
+	
+	var path = fsys.dlg.openEx();
+	
+	if(path){
+		for(k, v in path){
+			var temp = string.split(v, "\");
+			min, max = table.range(temp);
+			winform.edit.print(winform.list.count);
+			winform.list.addItem(temp[max]);
+			cfg.config.path[winform.list.count] = v;
+			winform.edit.print(winform.list.count);
+			winform.edit.print();
+		}
+		
+		cfg.config.save();
+	}
+}
+
+//移除
+winform.remove.oncommand = function(id,event){
+	var video_path_focus = winform.list.getFocused();
+	
+	//如果选中的视频正在播放则停止播放
+	if(video_path_focus == video_focus){
+		vlcPlayer.stop();
+		winform.play.text = '\uF04B';
+		frmChild.show(false);
+	}
+	
+	//如果未选中过视频就删除则默认删除第一个
+	if(video_path_focus == 0){
+		video_path_focus = 1;
+	}
+	
+	winform.list.delItem(video_path_focus);
+	cfg.config.path[video_path_focus] = null;
+	
+	for(i = video_path_focus; winform.list.count; 1){
+		cfg.config.path[i] = cfg.config.path[i+1];
+		cfg.config.path[i+1] = null;
+	}
+	
+	cfg.config.save();
+}
+
+//播放与暂停
+winform.play.oncommand = function(id,event){
+	if(vlcPlayer.isPlaying()){
+		winform.play.text = '\uF04B';
+		vlcPlayer.pause();
+	}
+	else {
+		//启动后立刻点击播放则播放第一个
+		if(video_focus == 0){
+			video_focus = 1;
+			setWallPaperWindow(frmChild.hwnd);
+			vlcPlayer.loadMediaFile(cfg.config.path[video_focus]);
+		}
+		
+		//不循环模式下，视频播放结束后，若点击播放则再次加载当前视频
+		if(vlcPlayer.isEnded()){
+			vlcPlayer.loadMediaFile(cfg.config.path[video_focus]);
+		}
+		
+		frmChild.show(true);
+		winform.play.text = '\uF04C';
+		vlcPlayer.play();
+	}
+}
+
+//播放上一个
+winform.up.oncommand = function(id,event){
+	//程序一启动点击则默认全屏
+	if(video_focus == 0) setWallPaperWindow(frmChild.hwnd);
+	
+	video_focus = video_focus - 1;
+	if(video_focus < 1){
+		video_focus = 1;
+	}
+	
+	frmChild.show(true);
+	winform.play.text = '\uF04C';
+	vlcPlayer.loadMediaFile(cfg.config.path[video_focus]);
+	vlcPlayer.play();
+}
+
+//播放停止
+winform.stop.oncommand = function(id,event){
+	vlcPlayer.stop();
+	winform.play.text = '\uF04B';
+	frmChild.show(false);
+}
+
+//播放下一个
+winform.next.oncommand = function(id,event){
+	if(video_focus == 0) setWallPaperWindow(frmChild.hwnd); //程序一启动点击则默认全屏
+	
+	video_focus = video_focus + 1;
+	if(video_focus > winform.list.count){
+		video_focus = winform.list.count;
+	}
+	
+	frmChild.show(true);
+	winform.play.text = '\uF04C';
+	vlcPlayer.loadMediaFile(cfg.config.path[video_focus]);
+	vlcPlayer.play();
+}
+
+//是否静音
+var volume_last = 0;
+winform.volume.oncommand = function(id,event){	
+	if(winform.volume_trackbar.progressPos == 0){
+		vlcPlayer.mute = false;
+		winform.volume.text = '\uF028';
+		
+		//如果在音量条被调到为0（静音）时点击，将音量设置为1
+		//为防止：上一次音量为0，点击静音，点击解除静音，此时音量“恢复”到0，“解除”静音
+		if(volume_last == 0) volume_last = 1;
+		
+		vlcPlayer.volume = volume_last;
+		winform.volume_trackbar.progressPos = volume_last;
+	}
+	else{
+		volume_last = vlcPlayer.volume;
+		winform.volume_trackbar.progressPos = 0;
+		
+		vlcPlayer.mute = true;
+		winform.volume.text = '\uF00D';
+	}
+}
+
+//音量调节 默认音量为100
+winform.volume_trackbar.progressPos = 100;
+vlcPlayer.volume = 100;
+winform.volume_trackbar.onMouseUp = function(){
+	vlcPlayer.volume = winform.volume_trackbar.progressPos;
+	
+	if(winform.volume_trackbar.progressPos == 0){
+		vlcPlayer.mute = true;
+		winform.volume.text = '\uF00D';
+	}
+	else{
+		vlcPlayer.mute = false;
+		winform.volume.text = '\uF028';
+	}
+	
+	//关闭音量弹窗，由生成代码复制而来，原代码已删除
+	toolinfo.trackPopup(false);
+}
+
+//模式
+winform.mode.onOk = function(){
+	cfg.config.mode = winform.mode.text;
+}
+
+var eventManager = vlcPlayer.getEventManager();
+eventManager.mediaPlayerEndReached = function(event){
+	select(winform.mode.text){
+		case "不循环"{
+			winform.play.text = '\uF04B';
+		}
+		case "列表循环"{
+			video_focus = video_focus + 1;
+			if(video_focus > winform.list.count) video_focus = 1;
+			
+			winform.edit.print(video_focus);
+			winform.edit.print(cfg.config.path[video_focus]);
+			vlcPlayer.loadMediaFile(cfg.config.path[video_focus]);
+			vlcPlayer.play();
+		}
+		else{
+        	winform.edit.print("else");
+    	}
+	}
+} 
+
+//主窗口关闭时视频窗口也关闭
+winform.onClose = function(hwnd,message,wParam,lParam){
+    vlcPlayer.release()
+    frmChild.close();
+}
+
+winform.show();
+win.loopMessage();
